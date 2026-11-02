@@ -5,6 +5,5 @@ include/Empire/generated/
 src/generated/
 .vs/*
 out/*
-.vscode
 build
 assets.bin

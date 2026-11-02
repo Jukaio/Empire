@@ -80,6 +80,7 @@ typedef struct emp_player_t
 	double last_damage_time;
 	double died_at_time;
 	float movement_speed;
+	int wants_debug;
 } emp_player_t;
 
 #define EMP_MAX_ENEMIES 256
@@ -196,6 +197,7 @@ typedef struct emp_entities_t
 	emp_level_t* level;
 	emp_music_player* music_player;
 	ma_engine* mixer;
+	emp_asset_t* active_level;
 } emp_G;
 
 extern emp_G* G;

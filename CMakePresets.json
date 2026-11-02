@@ -1,0 +1,63 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 20,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "emscripten-release",
+      "displayName": "Emscripten Release",
+      "description": "Target WebAssembly using Emscripten toolchain",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/emscripten-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+        "VCPKG_ENABLED": "OFF",
+        "CMAKE_EXECUTABLE_SUFFIX": ".js"
+      }
+    },
+    {
+      "name": "emscripten-debug",
+      "displayName": "Emscripten Debug",
+      "description": "Target WebAssembly with debug info using Emscripten toolchain",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/emscripten-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_TOOLCHAIN_FILE": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+        "VCPKG_ENABLED": "OFF",
+        "CMAKE_EXECUTABLE_SUFFIX": ".js"
+      }
+    },
+    {
+      "name": "vs-default",
+      "displayName": "Visual Studio (Default)",
+      "description": "Standard native Windows build using default Visual Studio generator and MSVC",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/vs",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CONFIGURATION_TYPES": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "emscripten-release",
+      "configurePreset": "emscripten-release"
+    },
+    {
+      "name": "emscripten-debug",
+      "configurePreset": "emscripten-debug"
+    },
+    {
+      "name": "vs-default",
+      "configurePreset": "vs-default"
+    }
+  ]
+}

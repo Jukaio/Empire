@@ -2,14 +2,12 @@
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 
-#include <Empire/miniaudio.h>
-
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #include <emscripten/html5.h>
 #endif
 
-#include <Empire/types.h>
+#include <Empire/text.h>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
@@ -24,8 +22,9 @@
 
 #include <Empire/generated/assets_generated.h>
 #include <Empire/level.h>
+#include <Empire/miniaudio.h>
 #include <Empire/stb_image.h>
-#include <Empire/text.h>
+#include <Empire/types.h>
 #include <Empire/util.h>
 
 typedef struct
@@ -45,13 +44,15 @@ void update_sprite_magnification(void)
 {
 	int width, height;
 	SDL_GetWindowSize(g_window, &width, &height);
-	
+
 	float raw_mag = 4.0f * (float)height / 1080.0f;
-	
+
 	int snapped = (int)roundf(raw_mag);
-	if (snapped < 2) snapped = 2;
-	if (snapped > 6) snapped = 6;
-	
+	if (snapped < 2)
+		snapped = 2;
+	if (snapped > 6)
+		snapped = 6;
+
 	SPRITE_MAGNIFICATION = (float)snapped;
 }
 
@@ -68,7 +69,6 @@ void main_loop(void)
 		if (event.type == SDL_EVENT_WINDOW_RESIZED) {
 			update_sprite_magnification();
 		}
-
 	}
 
 	Uint64 current_time = SDL_GetTicks();
@@ -87,7 +87,7 @@ void main_loop(void)
 	SDL_GetWindowSize(g_window, &win_w, &win_h);
 
 	char buffer2[64];
-	SDL_snprintf(buffer2, sizeof(buffer2), "Under the C");
+	SDL_snprintf(buffer2, sizeof(buffer2), "");
 	emp_draw_text((float)win_w / 2 - 200, 100, buffer2, 187, 195, 208, &g_assets->ttf->asepritefont);
 
 	SDL_RenderPresent(g_renderer);
@@ -158,7 +158,8 @@ const char* get_asset_argument(int argc, char* arguments[])
 	return "";
 }
 
-typedef struct emp_audio_t {
+typedef struct emp_audio_t
+{
 	ma_decoder decoder;
 	const void* data;
 	size_t size;
@@ -169,7 +170,7 @@ void emp_load_ogg_asset(struct emp_asset_t* asset)
 	emp_audio_t* audio = SDL_malloc(sizeof(emp_audio_t));
 	audio->data = asset->data.data;
 	audio->size = asset->data.size;
-	
+
 	ma_decoder_config config = ma_decoder_config_init(ma_format_f32, 2, g_audio_engine.sampleRate);
 	ma_result result = ma_decoder_init_memory(audio->data, audio->size, &config, &audio->decoder);
 	if (result != MA_SUCCESS) {
@@ -189,16 +190,16 @@ void emp_unload_ogg_asset(struct emp_asset_t* asset)
 	}
 }
 
-
 #ifdef __EMSCRIPTEN__
-EM_BOOL on_canv_resize(int eventType, const EmscriptenUiEvent* uiEvent, void* userData) {
-	
+EM_BOOL on_canv_resize(int eventType, const EmscriptenUiEvent* uiEvent, void* userData)
+{
+
 	SDL_SetWindowSize(g_window, (int)uiEvent->windowInnerWidth, (int)uiEvent->windowInnerHeight);
-	
+
 	emscripten_set_element_css_size("#canvas", uiEvent->windowInnerWidth, uiEvent->windowInnerHeight);
-    
+
 	SDL_Log("Resized to: %d x %d", (int)uiEvent->windowInnerWidth, (int)uiEvent->windowInnerHeight);
-    return EM_TRUE;
+	return EM_TRUE;
 }
 #endif
 
@@ -221,9 +222,8 @@ emp_compressed_buffer write_game_snapshot()
 	total_size += tile_health_size;
 
 	static emp_buffer scratch_buffer;
-	if (scratch_buffer.size != total_size)
-	{
-		scratch_buffer.data =SDL_realloc(scratch_buffer.data, total_size);
+	if (scratch_buffer.size != total_size) {
+		scratch_buffer.data = SDL_realloc(scratch_buffer.data, total_size);
 		scratch_buffer.size = total_size;
 	}
 
@@ -231,7 +231,7 @@ emp_compressed_buffer write_game_snapshot()
 
 	SDL_memcpy(scratch_buffer.data + write_pos, G->args, args_size);
 	write_pos += args_size;
-	
+
 	SDL_memcpy(scratch_buffer.data + write_pos, G->player, player_size);
 	write_pos += player_size;
 
@@ -245,7 +245,6 @@ emp_compressed_buffer write_game_snapshot()
 	write_pos += bullet_size;
 
 	SDL_memcpy(scratch_buffer.data + write_pos, G->level->health, tile_health_size);
-
 
 	return emp_compress_buffer(scratch_buffer);
 }
@@ -269,16 +268,16 @@ void restore_game_snapshot(emp_compressed_buffer compressed_buffer)
 	SDL_memcpy(G->player, state_buffer.data + read_pos, player_size);
 	read_pos += player_size;
 
-	SDL_memcpy(G->enemies , state_buffer.data+ read_pos, enemy_size);
+	SDL_memcpy(G->enemies, state_buffer.data + read_pos, enemy_size);
 	read_pos += enemy_size;
 
-	SDL_memcpy(G->spawners , state_buffer.data+ read_pos, spawner_size);
+	SDL_memcpy(G->spawners, state_buffer.data + read_pos, spawner_size);
 	read_pos += spawner_size;
 
-	SDL_memcpy(G->bullets , state_buffer.data+ read_pos, bullet_size);
+	SDL_memcpy(G->bullets, state_buffer.data + read_pos, bullet_size);
 	read_pos += bullet_size;
 
-	SDL_memcpy(G->level->health , state_buffer.data+ read_pos, tile_health_size);
+	SDL_memcpy(G->level->health, state_buffer.data + read_pos, tile_health_size);
 	read_pos += tile_health_size;
 
 	emp_free_buffer(&state_buffer);
@@ -290,11 +289,14 @@ int main(int argc, char* argv[])
 		SDL_Log("Failed to initialize SDL: %s", SDL_GetError());
 		return 1;
 	}
+	// TODO: Presentation mode
+	int win_w = 1920;
+	int win_h = 1152;
 
-	SDL_DisplayID display = SDL_GetPrimaryDisplay();
-	const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(display);
-	int win_w = (int)(mode->w * 0.8f);
-	int win_h = (int)(mode->h * 0.8f);
+	// SDL_DisplayID display = SDL_GetPrimaryDisplay();
+	// const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(display);
+	// int win_w = (int)(mode->w * 0.8f);
+	// int win_h = (int)(mode->h * 0.8f);
 	SDL_CreateWindowAndRenderer("Empire", win_w, win_h, SDL_WINDOW_RESIZABLE, &g_window, &g_renderer);
 	SDL_SetWindowPosition(g_window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
 
@@ -327,7 +329,7 @@ int main(int argc, char* argv[])
 	};
 
 	G = SDL_malloc(sizeof(emp_G));
-	
+
 	ma_result result = ma_engine_init(NULL, &g_audio_engine);
 	if (result != MA_SUCCESS) {
 		SDL_Log("Failed to initialize miniaudio engine: %d", result);
@@ -350,7 +352,7 @@ int main(int argc, char* argv[])
 	emp_init_enemy_configs();
 	emp_init_weapon_configs();
 
-	emp_create_level(&G->assets->ldtk->world, 0);
+	emp_create_level(&G->assets->ldtk->presentation, 0);
 
 	emp_music_player_init();
 
@@ -380,7 +382,7 @@ int main(int argc, char* argv[])
 			last_time = currentTime;
 
 			emp_compressed_buffer* next = &prvious_states[prev_state_write];
-			if(next->data) { 
+			if (next->data) {
 				SDL_free(next->data);
 				next->data = NULL;
 			}
@@ -389,11 +391,9 @@ int main(int argc, char* argv[])
 		}
 
 		const bool* keys = SDL_GetKeyboardState(NULL);
-		if (keys[SDL_SCANCODE_R])
-		{
+		if (keys[SDL_SCANCODE_R]) {
 			u32 slot = (prev_state_write - 1) & (1024 - 1);
-			if (prvious_states[slot].original_size > 0)
-			{
+			if (prvious_states[slot].original_size > 0) {
 				restore_game_snapshot(prvious_states[slot]);
 				prev_state_write = slot;
 			}

@@ -2,7 +2,7 @@
 #include "Empire/types.h"
 struct emp_asset_t;
 
-#define emp_sublevel_capacity 16
+#define emp_sublevel_capacity 32
 #define emp_value_buffer_capacity 512 * 512
 #define emp_entities_capacity 2048
 #define emp_teleporter_capacity 32
@@ -35,10 +35,11 @@ typedef struct emp_tiles_data_t
 	u32 count;
 } emp_tiles_data_t;
 
-
 typedef struct emp_decoration_data_t
 {
 	float grid_size;
+	float offset_x;
+	float offset_y;
 	emp_tiles_data_t tiles;
 } emp_decoration_data_t;
 
@@ -48,7 +49,14 @@ typedef struct emp_sublevel_t
 
 	emp_tiles_data_t tiles;
 	emp_value_grid_t values;
-	emp_decoration_data_t decoration;
+
+	emp_decoration_data_t items_8x8;
+	emp_decoration_data_t items_12x12;
+	emp_decoration_data_t items_16x16;
+
+	emp_decoration_data_t core;
+	emp_decoration_data_t extra;
+	emp_decoration_data_t background;
 } emp_sublevel_t;
 
 typedef struct emp_sublevel_list_t
@@ -117,7 +125,7 @@ typedef struct emp_level_teleporter_list_t
 {
 	emp_level_teleporter_t entries[emp_teleporter_capacity];
 	u32 count;
-}emp_level_teleporter_list_t;
+} emp_level_teleporter_list_t;
 
 typedef struct emp_level_asset_t
 {

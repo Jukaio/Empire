@@ -34,14 +34,25 @@
     },
     {
       "name": "vs-default",
-      "displayName": "Visual Studio (Default)",
-      "description": "Standard native Windows build using default Visual Studio generator and MSVC",
+      "displayName": "Visual Studio (Debug)",
+      "description": "Standard native Windows debug build using Visual Studio and MSVC",
       "generator": "Visual Studio 17 2022",
       "architecture": "x64",
-      "binaryDir": "${sourceDir}/build/vs",
+      "binaryDir": "${sourceDir}/build/vs-debug",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_CONFIGURATION_TYPES": "Debug",
+        "CMAKE_CONFIGURATION_TYPES": "Debug;Release;RelWithDebInfo",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "vs-release",
+      "displayName": "Visual Studio (Release)",
+      "description": "Optimized standalone native Windows release build",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/vs-release",
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     }
@@ -57,7 +68,13 @@
     },
     {
       "name": "vs-default",
-      "configurePreset": "vs-default"
+      "configurePreset": "vs-default",
+      "configuration": "Debug"
+    },
+    {
+      "name": "vs-release",
+      "configurePreset": "vs-release",
+      "configuration": "Release"
     }
   ]
 }

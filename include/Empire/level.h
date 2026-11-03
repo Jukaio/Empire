@@ -2,7 +2,7 @@
 #include "Empire/types.h"
 struct emp_asset_t;
 
-#define emp_sublevel_capacity 32
+#define emp_sublevel_capacity 128
 #define emp_value_buffer_capacity 512 * 512
 #define emp_entities_capacity 2048
 #define emp_teleporter_capacity 32

@@ -70,17 +70,22 @@ typedef struct emp_player_t
 	u32 generation;
 	u32 weapon_index;
 	emp_vec2_t pos;
-	emp_asset_t* texture_asset;
+	emp_vec2_t vel;
 	double last_shot;
 	bool is_teleporting;
 	bool flip;
 	bool alive;
+	bool prev_w_pressed;
+	bool prev_s_pressed;
+	bool prev_a_pressed;
+	bool prev_d_pressed;
 	float health;
 	float max_health;
 	double last_damage_time;
 	double died_at_time;
 	float movement_speed;
 	int wants_debug;
+	float timer;
 } emp_player_t;
 
 #define EMP_MAX_ENEMIES 256

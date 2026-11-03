@@ -289,6 +289,7 @@ int main(int argc, char* argv[])
 		SDL_Log("Failed to initialize SDL: %s", SDL_GetError());
 		return 1;
 	}
+	
 	// TODO: Presentation mode
 	int win_w = 1920;
 	int win_h = 1152;
@@ -370,6 +371,8 @@ int main(int argc, char* argv[])
 
 	u32 prev_state_write = 0;
 	emp_compressed_buffer* prvious_states = SDL_calloc(1024, sizeof(emp_compressed_buffer));
+
+
 
 	while (g_running) {
 		frame_count++;

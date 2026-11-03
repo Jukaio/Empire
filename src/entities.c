@@ -336,11 +336,10 @@ bool check_overlap_bullet_enemy(emp_bullet_t* bullet, emp_enemy_t* enemy)
 	return emp_vec2_dist_sq(bullet_center, enemy_center) < size * size;
 }
 
-bool check_overlap_bullet_player(emp_bullet_t* bullet, emp_player_t* player)
+bool check_overlap_bullet_player(emp_bullet_t* bullet, emp_vec2_t pos)
 {
-	emp_texture_t* texture = player->texture_asset->handle;
-	float size = texture->width / 3.0f;
-	return emp_vec2_dist_sq(bullet->pos, player->pos) < size * size;
+	float size = 32.0f / 2.0f;
+	return emp_vec2_dist_sq(bullet->pos, pos) < size * size;
 }
 
 bool check_overlap_bullet(emp_bullet_t* bullet, emp_vec2_t pos, float size)
@@ -854,6 +853,12 @@ u32 emp_create_player()
 	G->player[0].max_health = 20;
 	G->player[0].last_damage_time = 0;
 	G->player[0].died_at_time = 0;
+	G->player[0].vel = (emp_vec2_t) { 0 };
+	G->player[0].prev_w_pressed = false;
+	G->player[0].prev_s_pressed = false;
+	G->player[0].prev_a_pressed = false;
+	G->player[0].prev_d_pressed = false;
+	G->player[0].timer = 0.0f;
 	return 0;
 }
 
@@ -972,65 +977,143 @@ void emp_player_update(emp_player_t* player)
 {
 	const bool* state = SDL_GetKeyboardState(NULL);
 	emp_player_conf_t conf = get_player_conf();
+	float dt = G->args->dt;
+
+	typedef enum {
+		PLAYER_STATE_IDLE_LEFT,
+		PLAYER_STATE_IDLE_RIGHT,
+		PLAYER_STATE_SWIM_LEFT,
+		PLAYER_STATE_SWIM_RIGHT,
+		PLAYER_STATE_WALK_LEFT,
+		PLAYER_STATE_WALK_RIGHT,
+	} emp_player_state_t;
 
 	if (player->alive && player->health <= 0 && player->died_at_time == 0) {
 		player->died_at_time = G->args->global_time;
 		player->alive = false;
 	}
 
-	emp_texture_t* tex = player->texture_asset->handle;
-	SDL_FRect src = source_rect(tex);
-	SDL_FRect dst = player_rect(player->pos, tex);
-
-	if (player->alive) {
-		dst.x = player->flip ? dst.x + dst.w : dst.x;
-		dst.w = player->flip ? -dst.w : dst.w;
-		double t = 0.3;
-		double has_taken_damage = player->last_damage_time + t - G->args->global_time;
-		if (has_taken_damage > 0.0) {
-			u8 mod_value = 255 - (u8)(600.0 * has_taken_damage);
-			SDL_SetTextureColorMod(tex->texture, 255, mod_value, mod_value);
-			SDL_RenderTexture(G->renderer, tex->texture, &src, &dst);
-			SDL_SetTextureColorMod(tex->texture, 255, 255, 255);
-		} else {
-			SDL_SetTextureColorMod(tex->texture, 255, 255, 255);
-			SDL_RenderTexture(G->renderer, tex->texture, &src, &dst);
-		}
-	} else {
-		dst.y = dst.y + dst.h;
-		dst.h = -dst.w;
-		SDL_SetTextureColorMod(tex->texture, 47, 77, 47);
-		SDL_RenderTexture(G->renderer, tex->texture, &src, &dst);
-
-		double time_left = player->died_at_time + 3 - G->args->global_time;
-		char buf[64];
-		SDL_snprintf(buf, 64, "You died.. Respawn in %d", (int)time_left);
-		emp_draw_text(dst.x - 230, dst.y, buf, 223, 132, 165, &G->assets->ttf->asepritefont);
-		if (time_left <= 0) {
-			emp_create_level(G->active_level, 1);
-		}
+	if (!player->alive) {
+		player->vel = (emp_vec2_t) { 0 };
+		player->prev_w_pressed = false;
+		player->prev_s_pressed = false;
+		player->prev_a_pressed = false;
+		player->prev_d_pressed = false;
 	}
+
+	emp_player_state_t current_state = player->flip ? PLAYER_STATE_IDLE_LEFT : PLAYER_STATE_IDLE_RIGHT;
 
 	if (player->alive) {
 		emp_vec2_t movement = { 0 };
 
-		if (state[SDL_SCANCODE_W]) {
-			movement.y = -conf.speed;
-		}
+		float speed = player->movement_speed == 0.0f ? conf.speed : player->movement_speed;
+		const float stroke_impulse = speed * 0.33f;
 
-		if (state[SDL_SCANCODE_A]) {
-			movement.x = -conf.speed;
+		float bubble_push_x = 0.0f;
+		float bubble_push_y = 0.0f;
+
+		bool a_pressed = state[SDL_SCANCODE_A];
+		bool a_tapped = a_pressed && !player->prev_a_pressed;
+		player->prev_a_pressed = a_pressed;
+
+		bool d_pressed = state[SDL_SCANCODE_D];
+		bool d_tapped = d_pressed && !player->prev_d_pressed;
+		player->prev_d_pressed = d_pressed;
+
+		if (a_tapped) {
 			player->flip = true;
+			player->vel.x = -stroke_impulse;
+			bubble_push_x += 1.0f;
 		}
-
-		if (state[SDL_SCANCODE_S]) {
-			movement.y = conf.speed;
-		}
-
-		if (state[SDL_SCANCODE_D]) {
-			movement.x = conf.speed;
+		if (d_tapped) {
 			player->flip = false;
+			player->vel.x = stroke_impulse;
+			bubble_push_x -= 1.0f;
 		}
+
+		float drag = 110.0f;
+		if (player->vel.x > 0.0f) {
+			if (state[SDL_SCANCODE_D]) {
+				drag = drag * 0.5f;
+			}
+			player->vel.x -= drag * dt;
+			if (player->vel.x < 0.0f)
+				player->vel.x = 0.0f;
+		} else if (player->vel.x < 0.0f) {
+			if (state[SDL_SCANCODE_A]) {
+				drag = drag * 0.5f;
+			}
+			player->vel.x += drag * dt;
+			if (player->vel.x > 0.0f)
+				player->vel.x = 0.0f;
+		}
+		movement.x = player->vel.x * dt;
+
+		bool w_pressed = state[SDL_SCANCODE_W];
+		bool w_tapped = w_pressed && !player->prev_w_pressed;
+		player->prev_w_pressed = w_pressed;
+
+		if (w_tapped) {
+			player->vel.y = -85.0f;
+			bubble_push_y += 1.0f;
+		}
+
+		bool s_pressed = state[SDL_SCANCODE_S];
+		bool s_tapped = s_pressed && !player->prev_s_pressed;
+		player->prev_s_pressed = s_pressed;
+
+		if (s_tapped) {
+			player->vel.y = 65.0f;
+			bubble_push_y -= 1.0f;
+		}
+
+		if (bubble_push_x != 0.0f || bubble_push_y != 0.0f) {
+			emp_vec2_t bdir = emp_vec2_normalize((emp_vec2_t) { bubble_push_x, bubble_push_y });
+			const emp_vec2_t bubble_pos = {
+				.x = player->pos.x + bdir.x * 6.0f,
+				.y = player->pos.y + bdir.y * 6.0f
+			};
+
+			for (int i = 0; i < 4; ++i) {
+				emp_bullet_h bh = emp_create_bullet();
+				if (bh.index != 0) {
+					emp_bullet_t* b = &G->bullets[bh.index];
+					b->pos = bubble_pos;
+					b->pos.x += random_float(-3.0f, 3.0f);
+					b->pos.y += random_float(-3.0f, 3.0f);
+
+					float spd = random_float(40.0f, 75.0f);
+					b->vel.x = bdir.x * spd + random_float(-8.0f, 8.0f);
+					b->vel.y = bdir.y * spd + random_float(-8.0f, 8.0f);
+					b->life_left = random_float(0.3f, 0.55f);
+					b->damage = 0.0f;
+					b->texture_asset = &G->assets->png->bullet4_8;
+					b->mask = 0;
+					b->custom_render = NULL;
+				}
+			}
+		}
+
+		const float gravity = 150.0f;
+
+		float max_sink_speed = 28.0f;
+		if (state[SDL_SCANCODE_S]) {
+			max_sink_speed = max_sink_speed * 2.0f;
+		}
+		if (player->vel.y > 0.0f && state[SDL_SCANCODE_W]) {
+			max_sink_speed = max_sink_speed * 0.5f;
+		}
+
+		player->vel.y += gravity * dt;
+		if (player->vel.y > max_sink_speed) {
+			player->vel.y = max_sink_speed;
+		}
+		movement.y = player->vel.y * dt;
+
+		if(state[SDL_SCANCODE_U]) {
+			player->timer = 0.0;
+		}
+		player->timer = player->timer + G->args->dt;
 
 		if (state[SDL_SCANCODE_M]) {
 			player->health = 0.0f;
@@ -1042,24 +1125,55 @@ void emp_player_update(emp_player_t* player)
 			player->wants_debug = 0;
 		}
 
-		movement = emp_vec2_normalize(movement);
-		float speed = player->movement_speed == 0.0f ? conf.speed : player->movement_speed;
-		movement = emp_vec2_mul(movement, G->args->dt * speed);
-
-		emp_vec2_t mouse_pos;
-		SDL_MouseButtonFlags buttons = SDL_GetMouseState(&mouse_pos.x, &mouse_pos.y);
-
 		emp_vec2_t pos_dx = emp_vec2_addx(player->pos, movement);
 		if (check_overlap_map(pos_dx)) {
 			movement.x = 0;
+			player->vel.x = 0.0f;
 		}
 
+		bool on_floor = false;
 		emp_vec2_t pos_dy = emp_vec2_addy(player->pos, movement);
 		if (check_overlap_map(pos_dy)) {
+			if (movement.y > 0.0f) {
+				on_floor = true;
+			}
 			movement.y = 0;
+			if (player->vel.x > 0.0f) {
+				if (state[SDL_SCANCODE_D]) {
+					drag = drag * 0.5f;
+				}
+				player->vel.x -= drag * dt;
+				if (player->vel.x < 0.0f)
+					player->vel.x = 0.0f;
+			} else if (player->vel.x < 0.0f) {
+				if (state[SDL_SCANCODE_A]) {
+					drag = drag * 0.5f;
+				}
+				player->vel.x += drag * dt;
+				if (player->vel.x > 0.0f)
+					player->vel.x = 0.0f;
+			}
+			player->vel.y = 0.0f;
 		}
 
 		player->pos = emp_vec2_add(player->pos, movement);
+
+
+		bool is_moving_x = SDL_fabsf(player->vel.x) > 4.0f;
+
+		// Just in case lol
+		if (!on_floor) {
+			on_floor = check_overlap_map((emp_vec2_t) { player->pos.x, player->pos.y + 2.0f });
+		}
+		if (!on_floor) {
+			current_state = player->flip ? PLAYER_STATE_SWIM_LEFT : PLAYER_STATE_SWIM_RIGHT;
+		} else {
+			if (is_moving_x) {
+				current_state = player->flip ? PLAYER_STATE_WALK_LEFT : PLAYER_STATE_WALK_RIGHT;
+			} else {
+				current_state = player->flip ? PLAYER_STATE_IDLE_LEFT : PLAYER_STATE_IDLE_RIGHT;
+			}
+		}
 
 		if (state[SDL_SCANCODE_1]) {
 			player->weapon_index = 1;
@@ -1080,16 +1194,77 @@ void emp_player_update(emp_player_t* player)
 		} else if (state[SDL_SCANCODE_K]) {
 			emp_create_level(G->active_level, 1);
 		}
+	}
 
-		if (buttons & SDL_BUTTON_MASK(SDL_BUTTON_LEFT) || state[SDL_SCANCODE_SPACE]) {
-			if (player->last_shot + weapons[player->weapon_index]->delay_between_shots < G->args->global_time) {
-				emp_vec2_t player_screen_pos = (emp_vec2_t) { .x = dst.x + dst.w / 2, .y = dst.y + dst.h / 2 };
-				emp_vec2_t delta = emp_vec2_sub(mouse_pos, player_screen_pos);
-				spawn_bullets(player->pos, delta, emp_enemy_bullet_mask | emp_heavy_bullet_mask, weapons[player->weapon_index]);
-				player->last_shot = G->args->global_time;
+	emp_texture_t* tex = NULL;
+	switch (current_state) {
+	case PLAYER_STATE_IDLE_LEFT:
+	case PLAYER_STATE_IDLE_RIGHT:
+		tex = G->assets->png->bird_idle_32.handle;
+		break;
+	case PLAYER_STATE_SWIM_LEFT:
+	case PLAYER_STATE_SWIM_RIGHT:
+		tex = G->assets->png->bird_swim_32.handle;
+		break;
+	case PLAYER_STATE_WALK_LEFT:
+	case PLAYER_STATE_WALK_RIGHT:
+		tex = G->assets->png->bird_walk_32.handle;
+		break;
+	}
+	SDL_FRect src = source_rect(tex);
+
+	SDL_FRect dst = player_rect(player->pos, tex);
+	if (player->alive) {
+		dst.x = player->flip ? dst.x + dst.w : dst.x;
+		dst.w = player->flip ? -dst.w : dst.w;
+		double t = 0.3;
+		double has_taken_damage = player->last_damage_time + t - G->args->global_time;
+		if (has_taken_damage > 0.0) {
+			u8 mod_value = 255 - (u8)(600.0 * has_taken_damage);
+			SDL_SetTextureColorMod(tex->texture, 255, mod_value, mod_value);
+			SDL_RenderTexture(G->renderer, tex->texture, &src, &dst);
+			SDL_SetTextureColorMod(tex->texture, 255, 255, 255);
+		} else {
+			SDL_SetTextureColorMod(tex->texture, 255, 255, 255);
+			SDL_RenderTexture(G->renderer, tex->texture, &src, &dst);
+		}
+
+		{
+			emp_vec2_t mouse_pos;
+			SDL_MouseButtonFlags buttons = SDL_GetMouseState(&mouse_pos.x, &mouse_pos.y);
+
+			SDL_FRect shot_rect = player_rect(player->pos, tex);
+			if (buttons & SDL_BUTTON_MASK(SDL_BUTTON_LEFT) || state[SDL_SCANCODE_SPACE]) {
+				if (player->last_shot + weapons[player->weapon_index]->delay_between_shots < G->args->global_time) {
+					emp_vec2_t player_screen_pos = (emp_vec2_t) { .x = shot_rect.x + shot_rect.w / 2, .y = shot_rect.y + shot_rect.h / 2 };
+					emp_vec2_t delta = emp_vec2_sub(mouse_pos, player_screen_pos);
+					spawn_bullets(player->pos, delta, emp_enemy_bullet_mask | emp_heavy_bullet_mask, weapons[player->weapon_index]);
+					player->last_shot = G->args->global_time;
+				}
 			}
 		}
+
+	} else {
+		dst.y = dst.y + dst.h;
+		dst.h = -dst.w;
+		SDL_SetTextureColorMod(tex->texture, 47, 77, 47);
+		SDL_RenderTexture(G->renderer, tex->texture, &src, &dst);
+
+		double time_left = player->died_at_time + 3 - G->args->global_time;
+		char buf[64];
+		SDL_snprintf(buf, 64, "You died.. Respawn in %d", (int)time_left);
+		emp_draw_text(dst.x - 230, dst.y, buf, 223, 132, 165, &G->assets->ttf->asepritefont);
+		if (time_left <= 0) {
+			emp_create_level(G->active_level, 1);
+		}
 	}
+
+	{
+		char buf[64];
+		SDL_snprintf(buf, 64, "%d", (int)player->timer);
+		emp_draw_text(16.0f, 64.0f, buf, 223, 132, 165, &G->assets->ttf->asepritefont);	
+	}
+
 }
 
 void emp_enemy_update(emp_enemy_t* enemy)
@@ -1243,7 +1418,7 @@ void emp_bullet_update(emp_bullet_t* bullet)
 
 	collision_done:;
 		if (bullet->mask & emp_player_bullet_mask) {
-			if (check_overlap_bullet_player(bullet, G->player)) {
+			if (check_overlap_bullet_player(bullet, G->player->pos)) {
 				// emp_damage_number(G->player->pos, (u32)bullet->damage);
 				play_one_shot(&G->assets->ogg->player_damage);
 				G->player->health = G->player->health -= bullet->damage;
@@ -1302,9 +1477,9 @@ static void emp_entity_tilemap(emp_decoration_data_t* const level_data, emp_vec2
 		// SDL_FRect animated = source_rect(deco);
 		SDL_FRect src = { desc->src.x, (float)desc->src.y, grid_size, grid_size };
 		// Animations turned off
-		//float value = (float)G->args->global_time / DECO_ANIMATION_SPEED;
-		//u32 src_x = (u32)value % deco->columns;
-		//src.x = (float)src_x * (float)level_data->grid_size;
+		// float value = (float)G->args->global_time / DECO_ANIMATION_SPEED;
+		// u32 src_x = (u32)value % deco->columns;
+		// src.x = (float)src_x * (float)level_data->grid_size;
 
 		emp_vec2_t pos = emp_vec2_add(desc->dst, offset);
 
@@ -1377,7 +1552,6 @@ void emp_level_update(void)
 		emp_entity_tilemap(&sublevel->items_8x8, sublevel->offset);
 		emp_entity_tilemap(&sublevel->items_12x12, sublevel->offset);
 		emp_entity_tilemap(&sublevel->items_16x16, sublevel->offset);
-
 	}
 	SDL_memset(G->level->enemy_in_tile, 0, sizeof(emp_enemy_t*) * EMP_LEVEL_TILES);
 }
@@ -1568,7 +1742,6 @@ void setup_level(emp_asset_t* level_asset)
 	SDL_memset(G->spawners, 0, sizeof(emp_spawner_t) * EMP_MAX_SPAWNERS);
 
 	u32 player = emp_create_player();
-	G->player[player].texture_asset = &G->assets->png->player_32;
 
 	emp_level_asset_t* level = (emp_level_asset_t*)level_asset->handle;
 	u32 found = emp_level_query(level, emp_entity_type_player, 0);
@@ -1692,6 +1865,17 @@ void emp_create_level(emp_asset_t* level_asset, int is_reload)
 	G->level->enemy_in_tile = enemy_in_tile;
 	SDL_Log("%s", level_asset->path);
 	setup_level(level_asset);
+
+
+	//emp_texture_t* tex = &G->assets->png->mouse.handle;
+	//void* pixels = NULL;
+	//int pitch = 0;
+	//SDL_LockTexture(tex->texture, NULL, &pixels, &pitch);
+
+	//SDL_CreateCursor((const u8*)pixels, (int)tex->width, (int)tex->height);
+
+	//SDL_UnlockTexture(tex);
+
 }
 
 void emp_destroy_level(void)

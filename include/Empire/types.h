@@ -16,7 +16,7 @@ typedef struct emp_buffer
 	u8* data;
 } emp_buffer;
 
-typedef struct emp_compressed_buffer
+typedef struct 
 {
 	u64 compressed_size;
 	u64 original_size;
@@ -42,7 +42,6 @@ typedef struct
 	u32 columns;
 	SDL_Texture* texture;
 } emp_texture_t;
-
 
 typedef struct emp_vec2_t
 {

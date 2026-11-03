@@ -24,6 +24,85 @@ emp_weapon_conf_t* text_particle_config;
 void emp_ka_ching(emp_vec2_t pos);
 void emp_damage_number(emp_vec2_t pos, u32 number);
 
+static SDL_Cursor* g_hovered_cursor;
+static SDL_Cursor* g_idle_cursor;
+
+SDL_Cursor* CreateCyanBlueCursor(u32 X, u32 A, u32 B, u32 C, u32 D)
+{
+	enum {
+		BASE_SIZE = 16, // Square canvas
+		SCALE = 4 // 16 * 2 = 32x32 cursor (use SCALE = 4 for 64x64)
+	};
+	enum {
+		W = BASE_SIZE * SCALE,
+		H = BASE_SIZE * SCALE
+	};
+
+#define _ 0x00000000
+
+	// Padded to a 16x16 square grid
+	const Uint32 base[BASE_SIZE][BASE_SIZE] = {
+		{ X, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ },
+		{ X, X, _, _, _, _, _, _, _, _, _, _, _, _, _, _ },
+		{ X, A, X, _, _, _, _, _, _, _, _, _, _, _, _, _ },
+		{ X, B, A, X, _, _, _, _, _, _, _, _, _, _, _, _ },
+		{ X, C, B, A, X, _, _, _, _, _, _, _, _, _, _, _ },
+		{ X, C, C, B, A, X, _, _, _, _, _, _, _, _, _, _ },
+		{ X, D, C, B, B, A, X, _, _, _, _, _, _, _, _, _ },
+		{ X, D, C, C, B, B, A, X, _, _, _, _, _, _, _, _ },
+		{ X, D, D, C, C, X, X, _, _, _, _, _, _, _, _, _ },
+		{ X, D, D, X, X, _, _, _, _, _, _, _, _, _, _, _ },
+		{ _, X, X, _, _, _, _, _, _, _, _, _, _, _, _, _ },
+		{ _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ },
+		{ _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ },
+		{ _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ },
+		{ _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ },
+		{ _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ },
+	};
+
+#undef _
+
+	// In SDL3 use SDL_CreateSurface; in SDL2 use SDL_CreateRGBSurfaceWithFormat
+	SDL_Surface* surface = SDL_CreateSurface(W, H, SDL_PIXELFORMAT_ARGB8888);
+	if (!surface) {
+		return NULL;
+	}
+
+	Uint32* pixels = (Uint32*)surface->pixels;
+	int pitch_pixels = surface->pitch / sizeof(Uint32);
+
+	for (int y = 0; y < BASE_SIZE; y++) {
+		for (int x = 0; x < BASE_SIZE; x++) {
+			Uint32 color = base[y][x];
+			for (int dy = 0; dy < SCALE; dy++) {
+				for (int dx = 0; dx < SCALE; dx++) {
+					pixels[(y * SCALE + dy) * pitch_pixels + (x * SCALE + dx)] = color;
+				}
+			}
+		}
+	}
+
+	SDL_Cursor* cursor = SDL_CreateColorCursor(surface, 0, 0);
+
+	SDL_DestroySurface(surface);
+
+	return cursor;
+}
+
+static void emp_idle_cursor()
+{
+	if (g_idle_cursor) {
+		SDL_SetCursor(g_idle_cursor);
+	}
+}
+
+static void emp_hover_cursor()
+{
+	if (g_hovered_cursor) {
+		SDL_SetCursor(g_hovered_cursor);
+	}
+}
+
 typedef struct emp_music_player
 {
 	ma_sound sounds[2];
@@ -859,6 +938,7 @@ u32 emp_create_player()
 	G->player[0].prev_a_pressed = false;
 	G->player[0].prev_d_pressed = false;
 	G->player[0].timer = 0.0f;
+	G->player[0].bubble_timer = 0.0f;
 	return 0;
 }
 
@@ -1110,7 +1190,7 @@ void emp_player_update(emp_player_t* player)
 		}
 		movement.y = player->vel.y * dt;
 
-		if(state[SDL_SCANCODE_U]) {
+		if (state[SDL_SCANCODE_U]) {
 			player->timer = 0.0;
 		}
 		player->timer = player->timer + G->args->dt;
@@ -1157,7 +1237,6 @@ void emp_player_update(emp_player_t* player)
 		}
 
 		player->pos = emp_vec2_add(player->pos, movement);
-
 
 		bool is_moving_x = SDL_fabsf(player->vel.x) > 4.0f;
 
@@ -1229,6 +1308,31 @@ void emp_player_update(emp_player_t* player)
 			SDL_RenderTexture(G->renderer, tex->texture, &src, &dst);
 		}
 
+		player->bubble_timer -= dt;
+		if (player->bubble_timer <= 0.0f) {
+			player->bubble_timer = random_float(1.5f, 3.5f);
+			int count = 2 + (simple_rng(&rng_state) % 5);
+			float head_x = player->pos.x + (player->flip ? -3.0f : 3.0f);
+			float head_y = player->pos.y - 12.0f;
+
+			for (int i = 0; i < count; ++i) {
+				emp_bullet_h bh = emp_create_bullet();
+				if (bh.index != 0) {
+					emp_bullet_t* b = &G->bullets[bh.index];
+					b->pos.x = head_x + random_float(-2.0f, 2.0f);
+					b->pos.y = head_y + random_float(-2.0f, 2.0f);
+
+					b->vel.x = random_float(-8.0f, 8.0f);
+					b->vel.y = -random_float(15.0f, 55.0f);
+					b->life_left = random_float(1.0f, 1.6f);
+					b->damage = 0.0f;
+					b->texture_asset = &G->assets->png->bullet4_8;
+					b->mask = 0;
+					b->custom_render = NULL;
+				}
+			}
+		}
+
 		{
 			emp_vec2_t mouse_pos;
 			SDL_MouseButtonFlags buttons = SDL_GetMouseState(&mouse_pos.x, &mouse_pos.y);
@@ -1262,9 +1366,8 @@ void emp_player_update(emp_player_t* player)
 	{
 		char buf[64];
 		SDL_snprintf(buf, 64, "%d", (int)player->timer);
-		emp_draw_text(16.0f, 64.0f, buf, 223, 132, 165, &G->assets->ttf->asepritefont);	
+		emp_draw_text(16.0f, 64.0f, buf, 223, 132, 165, &G->assets->ttf->asepritefont);
 	}
-
 }
 
 void emp_enemy_update(emp_enemy_t* enemy)
@@ -1587,7 +1690,7 @@ void emp_entities_init()
 	SDL_memset(G->spawners, 0, sizeof(emp_spawner_t) * EMP_MAX_SPAWNERS);
 }
 
-int emp_teleporter_uptdate(emp_level_teleporter_t const* teleporter)
+int emp_teleporter_uptdate(emp_level_teleporter_t const* teleporter, bool* is_thinking_about_it)
 {
 	emp_asset_t* texture_asset = &G->assets->png->cave_32;
 	emp_texture_t* texture = texture_asset->handle;
@@ -1608,6 +1711,7 @@ int emp_teleporter_uptdate(emp_level_teleporter_t const* teleporter)
 	emp_vec2_t mouse_pos;
 	SDL_MouseButtonFlags buttons = SDL_GetMouseState(&mouse_pos.x, &mouse_pos.y);
 	int is_hovering = emp_vec2_dist(mouse_pos, centre) < EMP_TILE_SIZE * SPRITE_MAGNIFICATION;
+
 	if (distance < EMP_TILE_SIZE) {
 		if (is_hovering) {
 			float ex = dst.w * 0.25f;
@@ -1616,6 +1720,7 @@ int emp_teleporter_uptdate(emp_level_teleporter_t const* teleporter)
 			dst.h = dst.h + ey;
 			dst.x = dst.x - (ex * 0.5f);
 			dst.y = dst.y - (ex * 0.5f);
+			*is_thinking_about_it = true;
 		}
 		if (buttons & SDL_BUTTON_MASK(SDL_BUTTON_RIGHT) && is_hovering) {
 			if (G->player->is_teleporting == 0 /*&& G->player->was_teleporting == 0*/) {
@@ -1681,15 +1786,22 @@ void emp_entities_update()
 	emp_level_update();
 	emp_music_player_update(G->music_player);
 
+	bool is_hovering_teleporter = false;
 	int is_teleporting = 0;
 	emp_level_asset_t* level = (emp_level_asset_t*)G->active_level->handle;
 	for (u64 i = 0; i < SDL_arraysize(level->teleporters.entries); i++) {
 		emp_level_teleporter_t* tp = level->teleporters.entries + i;
 		if (tp->id != 0) {
-			is_teleporting = emp_teleporter_uptdate(tp) || is_teleporting;
+			is_teleporting = emp_teleporter_uptdate(tp, &is_hovering_teleporter) || is_teleporting;
 		}
 	}
 	G->player->is_teleporting = is_teleporting;
+
+	if (is_hovering_teleporter) {
+		emp_hover_cursor();
+	} else {
+		emp_idle_cursor();
+	}
 
 	for (u64 i = 0; i < EMP_MAX_PLAYERS; ++i) {
 		emp_player_t* player = &G->player[i];
@@ -1866,20 +1978,18 @@ void emp_create_level(emp_asset_t* level_asset, int is_reload)
 	SDL_Log("%s", level_asset->path);
 	setup_level(level_asset);
 
-
-	//emp_texture_t* tex = &G->assets->png->mouse.handle;
-	//void* pixels = NULL;
-	//int pitch = 0;
-	//SDL_LockTexture(tex->texture, NULL, &pixels, &pitch);
-
-	//SDL_CreateCursor((const u8*)pixels, (int)tex->width, (int)tex->height);
-
-	//SDL_UnlockTexture(tex);
-
+	g_idle_cursor = CreateCyanBlueCursor(0xFFE6FAFC, 0xFF8CF2E6, 0xFF46D1DB, 0xFF2196CA, 0xFF1464A0);
+	g_hovered_cursor = CreateCyanBlueCursor(0xFFFFFFFF, 0xFFD6FFFF, 0xFF78FFE8, 0xFF30E6CC, 0xFF14B4A4);
+	emp_idle_cursor();
 }
 
 void emp_destroy_level(void)
 {
 	SDL_free(G->level->tiles);
 	SDL_free(G->level);
+
+	if (g_idle_cursor)
+		SDL_DestroyCursor(g_idle_cursor);
+	if (g_hovered_cursor)
+		SDL_DestroyCursor(g_hovered_cursor);
 }

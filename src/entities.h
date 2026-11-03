@@ -86,6 +86,7 @@ typedef struct emp_player_t
 	float movement_speed;
 	int wants_debug;
 	float timer;
+	float bubble_timer;
 } emp_player_t;
 
 #define EMP_MAX_ENEMIES 256

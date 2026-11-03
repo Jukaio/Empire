@@ -32,6 +32,8 @@ typedef struct
 	float m[16];
 } emp_mat4_t;
 
+#define SNAPSHOT_BUFFER_COUNT (1 << 16)
+
 static SDL_Window* g_window = NULL;
 static SDL_Renderer* g_renderer = NULL;
 static emp_generated_assets_o* g_assets = NULL;
@@ -39,6 +41,14 @@ static emp_asset_manager_o* g_asset_mgr = NULL;
 static Uint64 g_last_time = 0;
 static bool g_running = true;
 static ma_engine g_audio_engine;
+
+static emp_compressed_buffer g_previous_states[SNAPSHOT_BUFFER_COUNT];
+static u32 g_prev_state_write = 0;
+static u64 g_last_snapshot_time = 0;
+static u64 g_frame_count = 0;
+
+emp_compressed_buffer write_game_snapshot(void);
+void restore_game_snapshot(emp_compressed_buffer compressed_buffer);
 
 void update_sprite_magnification(void)
 {
@@ -71,7 +81,35 @@ void main_loop(void)
 		}
 	}
 
+	// Snapshot recording every 100ms
+	g_frame_count++;
 	Uint64 current_time = SDL_GetTicks();
+	if (current_time - g_last_snapshot_time >= 100) {
+		char title[64];
+		SDL_snprintf(title, sizeof(title), "My App - FPS: %llu", (unsigned long long)g_frame_count);
+		SDL_SetWindowTitle(g_window, title);
+		g_frame_count = 0;
+		g_last_snapshot_time = current_time;
+
+		emp_compressed_buffer* next = &g_previous_states[g_prev_state_write];
+		if (next->data) {
+			SDL_free(next->data);
+			next->data = NULL;
+		}
+		*next = write_game_snapshot();
+		g_prev_state_write = (g_prev_state_write + 1) & (SNAPSHOT_BUFFER_COUNT - 1);
+	}
+
+	// Rewind feature (Hold 'R' to restore previous snapshots)
+	const bool* keys = SDL_GetKeyboardState(NULL);
+	if (keys && keys[SDL_SCANCODE_R]) {
+		u32 slot = (g_prev_state_write - 1) & (SNAPSHOT_BUFFER_COUNT - 1);
+		if (g_previous_states[slot].original_size > 0) {
+			restore_game_snapshot(g_previous_states[slot]);
+			g_prev_state_write = slot;
+		}
+	}
+
 	double delta_time = (current_time - g_last_time) / 1000.0;
 	delta_time = SDL_min(delta_time, 0.5f);
 	g_last_time = current_time;
@@ -91,6 +129,14 @@ void main_loop(void)
 	emp_draw_text((float)win_w / 2 - 200, 100, buffer2, 187, 195, 208, &g_assets->ttf->asepritefont);
 
 	SDL_RenderPresent(g_renderer);
+
+	emp_asset_manager_check_hot_reload(g_asset_mgr, G->args->dt);
+
+#ifdef __EMSCRIPTEN__
+	if (!g_running) {
+		emscripten_cancel_main_loop();
+	}
+#endif
 }
 
 int parse_atlas_width_from_path_name(const char* path)
@@ -126,7 +172,8 @@ void emp_png_load_func(emp_asset_t* asset)
 		emp_tex->rows = height / atlas_size;
 		emp_tex->width = (float)atlas_size;
 		emp_tex->height = (float)atlas_size;
-	} else {
+	}
+	else {
 		emp_tex->source_size = width;
 		emp_tex->rows = 1;
 		emp_tex->columns = 1;
@@ -181,6 +228,7 @@ void emp_load_ogg_asset(struct emp_asset_t* asset)
 	}
 	asset->handle = audio;
 }
+
 void emp_unload_ogg_asset(struct emp_asset_t* asset)
 {
 	emp_audio_t* audio = asset->handle;
@@ -193,11 +241,8 @@ void emp_unload_ogg_asset(struct emp_asset_t* asset)
 #ifdef __EMSCRIPTEN__
 EM_BOOL on_canv_resize(int eventType, const EmscriptenUiEvent* uiEvent, void* userData)
 {
-
 	SDL_SetWindowSize(g_window, (int)uiEvent->windowInnerWidth, (int)uiEvent->windowInnerHeight);
-
 	emscripten_set_element_css_size("#canvas", uiEvent->windowInnerWidth, uiEvent->windowInnerHeight);
-
 	SDL_Log("Resized to: %d x %d", (int)uiEvent->windowInnerWidth, (int)uiEvent->windowInnerHeight);
 	return EM_TRUE;
 }
@@ -289,15 +334,10 @@ int main(int argc, char* argv[])
 		SDL_Log("Failed to initialize SDL: %s", SDL_GetError());
 		return 1;
 	}
-	
-	// TODO: Presentation mode
+
 	int win_w = 1920;
 	int win_h = 1152;
 
-	// SDL_DisplayID display = SDL_GetPrimaryDisplay();
-	// const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(display);
-	// int win_w = (int)(mode->w * 0.8f);
-	// int win_h = (int)(mode->h * 0.8f);
 	SDL_CreateWindowAndRenderer("Empire", win_w, win_h, SDL_WINDOW_RESIZABLE, &g_window, &g_renderer);
 	SDL_SetWindowPosition(g_window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
 
@@ -361,51 +401,17 @@ int main(int argc, char* argv[])
 
 	SDL_zerop(G->args);
 	g_last_time = SDL_GetTicks();
+	g_last_snapshot_time = SDL_GetTicks() - 900;
 
 #ifdef __EMSCRIPTEN__
 	emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, NULL, EM_FALSE, on_canv_resize);
 	emscripten_set_main_loop(main_loop, 0, 1);
 #else
-	u64 last_time = SDL_GetTicks() - 900;
-	u64 frame_count = 0;
-
-	u32 prev_state_write = 0;
-	emp_compressed_buffer* prvious_states = SDL_calloc(1024, sizeof(emp_compressed_buffer));
-
-
-
 	while (g_running) {
-		frame_count++;
-		u64 currentTime = SDL_GetTicks();
-		if (currentTime - last_time >= 100) {
-			char title[64];
-			SDL_snprintf(title, sizeof(title), "My App - FPS: %llu", frame_count);
-			SDL_SetWindowTitle(g_window, title);
-			frame_count = 0;
-			last_time = currentTime;
-
-			emp_compressed_buffer* next = &prvious_states[prev_state_write];
-			if (next->data) {
-				SDL_free(next->data);
-				next->data = NULL;
-			}
-			*next = write_game_snapshot();
-			prev_state_write = prev_state_write + 1 & (1024 - 1);
-		}
-
-		const bool* keys = SDL_GetKeyboardState(NULL);
-		if (keys[SDL_SCANCODE_R]) {
-			u32 slot = (prev_state_write - 1) & (1024 - 1);
-			if (prvious_states[slot].original_size > 0) {
-				restore_game_snapshot(prvious_states[slot]);
-				prev_state_write = slot;
-			}
-		}
-
 		main_loop();
-		emp_asset_manager_check_hot_reload(g_asset_mgr, G->args->dt);
 	}
 #endif
+
 	SDL_DestroyWindow(g_window);
 	SDL_Quit();
 

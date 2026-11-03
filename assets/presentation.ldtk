@@ -2284,7 +2284,7 @@
 			"savedSelections": [],
 			"cachedPixelData": {
 				"opaqueTiles": "000000001000000000000000000001000000000000",
-				"averageColors": "5568b45755680000000088878887b457f123b457e456e456888788875568b4575568e456e456887788772da67c952da600000000887788777c95fa757c95bc95bc95ba87ba872da67c952da6bc95bc95ba87ba87"
+				"averageColors": "5357b34653570000000087668766b246f123b246e246e246876687665357b3465357e246e246876687662b737a732b7300000000876687667a73f8427a73ba63ba63b865b8652b737a732b73ba63ba63b865b865"
 			}
 		},
 		{
@@ -2304,7 +2304,7 @@
 			"enumTags": [],
 			"customData": [],
 			"savedSelections": [],
-			"cachedPixelData": { "opaqueTiles": "0000", "averageColors": "589a489a4899489a" }
+			"cachedPixelData": { "opaqueTiles": "0000", "averageColors": "2345489a4899489a" }
 		},
 		{
 			"__cWid": 4,
@@ -2456,7 +2456,7 @@
 			"enumTags": [],
 			"customData": [],
 			"savedSelections": [],
-			"cachedPixelData": { "opaqueTiles": "0", "averageColors": "d456" }
+			"cachedPixelData": { "opaqueTiles": "0", "averageColors": "d355" }
 		},
 		{
 			"__cWid": 1,
@@ -2475,7 +2475,7 @@
 			"enumTags": [],
 			"customData": [],
 			"savedSelections": [],
-			"cachedPixelData": { "opaqueTiles": "0", "averageColors": "d677" }
+			"cachedPixelData": { "opaqueTiles": "0", "averageColors": "d666" }
 		},
 		{
 			"__cWid": 3,
@@ -2515,7 +2515,7 @@
 			"savedSelections": [],
 			"cachedPixelData": {
 				"opaqueTiles": "00000000000000000110011000000000000000000000",
-				"averageColors": "16b3299416cd36cd46cd16cd0d561d564ddb4cca1d721d720fe30fe34d722d72ec9af857f867eb9aec9af757f757eb9a4dab4a784a794dab36cd36cd39d539d54d633d634d724d7226cd36cd39d519d50a330a331a330000"
+				"averageColors": "29a4299416cd36cd46cd16cd0d561d564ddb4cca1d721d720fe30fe34d722d72ec9af857f867eb9aec9af757f757eb9a4dab4a784a794dab36cd36cd39d539d54d633d634d724d7226cd36cd39d519d50a330a331a330000"
 			}
 		},
 		{
